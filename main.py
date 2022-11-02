@@ -8,6 +8,7 @@ from pathlib import Path
 from datetime import datetime
 from numpy import any as np_any
 from past.builtins import raw_input
+from screeninfo import get_monitors
 
 x = 10
 
