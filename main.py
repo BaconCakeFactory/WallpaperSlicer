@@ -1,7 +1,7 @@
 import math
 from os import path as os_path, chdir, mkdir
 import numpy
-from cv2 import imread, imwrite
+import cv2
 import tkinter
 from tkinter import filedialog
 from pathlib import Path
@@ -106,7 +106,7 @@ def get_image() -> numpy.ndarray:
     path_to_image = filedialog.askopenfilename(filetypes=[("Image of Video files", ".png .jpg .jpeg")],
                                                title="Select an Image.")
     # Set Input Image
-    source_img = imread(path_to_image)
+    source_img = cv2.imread(path_to_image)
     # Check If Image Was Selected
     if not np_any(source_img):
         print("Error while choosing input image.")
@@ -189,7 +189,7 @@ def save_slices(images: list) -> str:
     chdir(folder_path)
 
     for (i, img) in enumerate(images):
-        imwrite(str(i + 1) + ".jpg", img)
+        cv2.imwrite(str(i + 1) + ".jpg", img)
 
     return folder_path
 
