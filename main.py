@@ -13,6 +13,8 @@ import subprocess
 import sys
 import os
 
+# for wallpaper change
+import shutil
 
 g_border_width = 20
 g_saving_res_w = 1920
@@ -66,21 +68,24 @@ def choose_arrangement(sizes: list) -> list:
 
 def choose_slicing_preference(img: numpy.ndarray, sizes: list) -> list:
     offsets = []
+    choice = ""
     # vertical alignment: offset from top of image when slicing
-    if img.shape[1] >= get_widest_monitor(sizes)[1]:
+    if img.shape[0] >= get_widest_monitor(sizes)[1]:
         # choose vertical alignment
         choice = input("Include top, bottom or middle section of image? (t/m/b): ")
-        # switch
-        widest_height = get_widest_monitor(sizes)[1]
-        img_to_monitor_difference = img.shape[1] - widest_height
-        for s in sizes:
-            if choice == "b":
-                offsets.append(int(img_to_monitor_difference + (widest_height - s[1])))
-                continue
-            if choice == "m":
-                offsets.append(int((img_to_monitor_difference + (widest_height - s[1])) / 2))
-                continue
-            offsets.append(0)
+    # switch
+    widest_height = get_widest_monitor(sizes)[1]
+    img_to_monitor_difference = img.shape[0] - widest_height
+    for s in sizes:
+        if choice == "b":
+            offsets.append(int(img_to_monitor_difference + ((widest_height - s[1]) * 0.5)))
+            continue
+        if choice == "m":
+            offsets.append(int((img_to_monitor_difference + ((widest_height - s[1]) * 0.5)) * 0.5))
+            print("> img_to_monitor_difference: " + str(img_to_monitor_difference) + ", widest - this / 2: " +
+                  str(((widest_height - s[1]) * 0.5)))
+            continue
+        offsets.append(int((widest_height - s[1]) * 0.5))
 
     return offsets
 
@@ -140,10 +145,17 @@ def scale_monitor_sizes(img: numpy.ndarray, sizes_o: list) -> list:
     one_percent = max_size[0] / 100
     factor = img_width / one_percent / 100
 
+    print(">>>>> monitors: " + str(max_image_size_mm(sizes)) + " - img: " + str(img_width) + ", " + str(img_height))
+
     # scale sizes to width
     for s in sizes:
         s[0] *= factor
         s[1] *= factor
+
+    print(">>>>> monitors: " + str(max_image_size_mm(sizes)) + " - img: " + str(img_width) + ", " + str(img_height))
+
+    # get max possible image size
+    max_size = max_image_size_mm(sizes)
 
     # if image is too short (height)
     if img_height < get_widest_monitor(sizes)[1]:
@@ -153,6 +165,7 @@ def scale_monitor_sizes(img: numpy.ndarray, sizes_o: list) -> list:
         for s in sizes:
             s[0] *= factor
             s[1] *= factor
+        print(">>>>> monitors: " + str(max_image_size_mm(sizes)) + " - img: " + str(img_width) + ", " + str(img_height))
 
     # floor values
     for s in sizes:
@@ -203,9 +216,56 @@ def open_file(filename):
         subprocess.call([opener, filename])
 
 
+# wallpaper change
+def change_wallpaper(number_of_monitors: int, path: str = "") -> None:
+    # remove second window (root)
+    tkinter.Tk().withdraw()
+
+    name_convention = ["Transcoded_002", "Transcoded_001", "Transcoded_000"]
+    output_directory = "C:/Users/User/AppData/Roaming/Microsoft/Windows/Themes"
+
+    # select path
+    if not path:
+        print("Choose a random file from the folder that holds the wallpapers.")
+        path = filedialog.askopenfilename()
+        path = os_path.dirname(path)
+
+    if not path:
+        print("No path found.")
+
+    # print(path)
+
+    # create list of files in directory that end with .jpg
+    images = [f for f in os.listdir(path) if f.endswith(".jpg") or f.endswith(".png")]
+
+    os.chdir(output_directory)
+
+    # loop through amount of desktops
+    for (idx, i) in enumerate(images):
+        if idx > number_of_monitors - 1:
+            continue
+        image_path = f"{path}/{i}"
+        new_image_path = f"{output_directory}/{name_convention[idx]}"
+        shutil.copy(image_path, new_image_path)
+
+    file_name = "restartExplorer.bat"
+    file = open(file_name, "w")
+    file.write('taskkill /im explorer.exe /f\nstart explorer.exe\nexit')
+    file.close()
+    filepath = f"{output_directory}/{file_name}"
+    os.startfile(filepath)
+
+
 if __name__ == "__main__":
     # get monitors
     monitor_sizes = get_monitor_sizes()
+
+    number_of_monitors = len(monitor_sizes)
+
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "change" or "wc":
+            change_wallpaper(number_of_monitors)
+            exit()
 
     # arrange monitors
     arranged_sizes = choose_arrangement(monitor_sizes)
@@ -229,6 +289,10 @@ if __name__ == "__main__":
     # save images
     save_path = save_slices(slices)
     print(">>> saved.")
+
+    # set wallpapers (only works for windows)
+    if os.name == "nt":
+        change_wallpaper(number_of_monitors, save_path)
 
     # open saved image path
     open_file(save_path)
