@@ -262,10 +262,10 @@ if __name__ == "__main__":
 
     number_of_monitors = len(monitor_sizes)
 
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "change" or "wc":
-            change_wallpaper(number_of_monitors)
-            exit()
+    change_variations = ["change", "wc", "cw"]
+    if len(sys.argv) > 1 and sys.argv[1] in change_variations:
+        change_wallpaper(number_of_monitors)
+        exit()
 
     # arrange monitors
     arranged_sizes = choose_arrangement(monitor_sizes)
@@ -292,7 +292,12 @@ if __name__ == "__main__":
 
     # set wallpapers (only works for windows)
     if os.name == "nt":
-        change_wallpaper(number_of_monitors, save_path)
+        no_change_variations = ["nochange", "no-change", "nc"]
+        if len(sys.argv) > 1 and sys.argv[1] in no_change_variations:
+            open_file(save_path)
+            exit()
+        else:
+            change_wallpaper(number_of_monitors, save_path)
 
     # open saved image path
     open_file(save_path)
