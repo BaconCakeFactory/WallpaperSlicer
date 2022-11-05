@@ -1,138 +1,305 @@
-from sys import exit as sys_exit
-from os import system as os_system, name as os_name, path as os_path, chdir, mkdir, startfile
-from yaml import safe_load as yaml_safe_load
-from cv2 import imread, imwrite, resize
+import math
+from os import path as os_path, chdir, mkdir
+import numpy
+import cv2
+import tkinter
 from tkinter import filedialog
-from tkinter import Tk
 from pathlib import Path
 from datetime import datetime
 from numpy import any as np_any
-from past.builtins import raw_input
+from screeninfo import get_monitors
+import copy as copy_please
+import subprocess
+import sys
+import os
 
-x = 10
+# for wallpaper change
+import shutil
 
-# Load Config File For Monitor Dimensions
-config = yaml_safe_load(open("config/config.yml"))
+g_border_width = 20
+g_saving_res_w = 1920
+g_saving_res_h = 1080
 
-Tk().withdraw()
 
-# Make Command To Clear Console
-clearConsole = lambda: os_system('cls' if os_name in ('nt', 'dos') else 'clear')
+def get_monitor_sizes() -> list:
+    sizes = []
+    for m in get_monitors():
+        sizes.append([m.width_mm, m.height_mm, m.is_primary])
 
-clearConsole()
+    return sizes
 
-# Select Input Image
-pathToImage = filedialog.askopenfilename()
 
-# Set Input Image
-sourceImg = imread(pathToImage)
+def monitor_str(size: list) -> str:
+    prim = ""
+    if size[2]:
+        prim = " Primary"
 
-# Check If Image Was Selected
-if not np_any(sourceImg):
-    print("Fehler beim Aussuchen des Ausgangsbildes :(")
-    sys_exit()
+    return "[w: " + str(size[0]) + " h: " + str(size[1]) + prim + "]"
 
-# Get Image Heigth And Set Image Width According To Aspect Ratio
-sourceImgHeight, sourceImgWidth, _ = sourceImg.shape
-cropH = sourceImgHeight
-cropW = (cropH / 9) * 16
-mmToPixel = cropW / config.get("dl").get("w")
 
-# Main Desktop Width / Right Desktop Width
-mDW = config.get("dm").get("w")
-rDW = config.get("dr").get("w")
-totalCropWidth = (mDW * 2 + rDW + config.get("dl").get("b") + config.get("dm").get("b")) * mmToPixel
+def choose_arrangement(sizes: list) -> list:
+    new_arrangement = []
+    if len(sizes) == 1:
+        return sizes
+    if len(sizes) > 3:
+        print("this program currently only supports up to three monitors.\n")
+    # list monitors
 
-totalCropToSourceRatio = 0
+    for j in range(len(sizes) - 1):
+        # list monitors
+        for i, s in enumerate(sizes):
+            print("(" + str(i + 1) + ") " + monitor_str(s))
+        # let user choose left monitor
+        left_most_monitor = input("Choose the left most monitor: ")
+        if not left_most_monitor.isnumeric() or int(left_most_monitor) < 1:
+            print("please enter a valid number.")
+            exit()
+        if int(left_most_monitor) > len(sizes):
+            print("there are not that many monitors.")
+            exit()
+        # input should now be a valid number ( > 0, < len sizes )
+        new_arrangement.append(sizes[int(left_most_monitor) - 1])
+        sizes.remove(sizes[int(left_most_monitor) - 1])
+    # append last element of sizes
+    new_arrangement.extend(sizes)
 
-# Offset To Top For Cropping (Section Selection (Top, Middle, Bottom))
-offsetH = 0
+    return new_arrangement
 
-# Offset To Top For Pushing Crop Into The Middle
-offsetW = int((sourceImgWidth - (totalCropWidth + int((mDW - rDW) * mmToPixel))) / 2)
 
-if totalCropWidth > sourceImgWidth:
-    print("Cropping Width (", totalCropWidth, ") is greater than Image Width (", sourceImgWidth, ")")
+def choose_slicing_preference(img: numpy.ndarray, sizes: list) -> list:
+    offsets = []
+    choice = ""
+    # vertical alignment: offset from top of image when slicing
+    if img.shape[0] >= get_widest_monitor(sizes)[1]:
+        # choose vertical alignment
+        choice = input("Include top, bottom or middle section of image? (t/m/b): ")
+    # switch
+    widest_height = get_widest_monitor(sizes)[1]
+    img_to_monitor_difference = img.shape[0] - widest_height
+    for s in sizes:
+        if choice == "b":
+            offsets.append(int(img_to_monitor_difference + ((widest_height - s[1]) * 0.5)))
+            continue
+        if choice == "m":
+            offsets.append(int((img_to_monitor_difference + ((widest_height - s[1]) * 0.5)) * 0.5))
+            print("> img_to_monitor_difference: " + str(img_to_monitor_difference) + ", widest - this / 2: " +
+                  str(((widest_height - s[1]) * 0.5)))
+            continue
+        offsets.append(int((widest_height - s[1]) * 0.5))
 
-    # Select If The Image Contains Focal Object
-    clearConsole()
-    print("Does the image contain a focal object?")
-    responseSection = None
-    while responseSection not in {"y", "n"}:
-        responseSection = raw_input("Please enter Yes(Y) or No(N): ").lower()
+    return offsets
 
-    if responseSection == "y":
-        totalCropWidth = totalCropWidth + int((mDW - rDW) * mmToPixel)
 
-    totalCropToSourceRatio = totalCropWidth / (sourceImgWidth / 100)
+def max_image_size_mm(sizes: list) -> list:
+    width = 0
+    # init with first monitor height
+    height = sizes[0][1]
+    for s in sizes:
+        width += s[0]
+        if s[1] > height:
+            height = s[1]
+    # border between monitors, each 20mm
+    width += (len(sizes) - 1) * g_border_width
 
-    print(totalCropToSourceRatio)
+    return [width, height]
 
-    # Resize Image To Correct Size
-    cropSourceRatio = (int(sourceImgWidth * (totalCropToSourceRatio / 100)),
-                       int(sourceImgHeight * (totalCropToSourceRatio / 100)))
-    sourceImgX = resize(sourceImg, cropSourceRatio)
 
-    sourceImg = sourceImgX
-    sourceImgHeight, sourceImgWidth, _ = sourceImg.shape
+def get_image() -> numpy.ndarray:
+    # remove second window (root)
+    tkinter.Tk().withdraw()
+    # Select Input Image
+    path_to_image = filedialog.askopenfilename(filetypes=[("Image of Video files", ".png .jpg .jpeg")],
+                                               title="Select an Image.")
+    # Set Input Image
+    source_img = cv2.imread(path_to_image)
+    # Check If Image Was Selected
+    if not np_any(source_img):
+        print("Error while choosing input image.")
+        exit()
 
-    # Select What Section Of Image Will Be Cropped
-    clearConsole()
-    print("What section of the image do you want to crop in?")
-    responseSection = None
-    while responseSection not in {"t", "m", "b"}:
-        responseSection = raw_input("Please enter top(T), middle(M) or bottom(B): ").lower()
+    return source_img
 
-    if responseSection == "t":
-        offsetH = 0
-    if responseSection == "m":
-        offsetH = int((sourceImgHeight - cropH) / 2)
-    if responseSection == "b":
-        offsetH = int(sourceImgHeight - cropH)
 
-    offsetW = 0
+def get_widest_monitor(sizes: list) -> list:
+    # get widest monitor
+    widest = sizes[0]
+    for s in sizes:
+        if s[0] > widest[0]:
+            widest = s
 
-# Crop Out First Image
-croppedImg1 = sourceImg[offsetH:offsetH + int(cropH), offsetW:offsetW + int(cropW)]
+    return widest
 
-# Offset Next Crop And Convert Pixels To Millimeters
-imgOffset = cropW + config.get("dl").get("b") * (cropW / config.get("dl").get("w"))
 
-# Crop Out Second Image
-croppedImg2 = sourceImg[offsetH:offsetH + int(cropH), offsetW + int(imgOffset):offsetW + int(imgOffset) + int(cropW)]
+def scale_monitor_sizes(img: numpy.ndarray, sizes_o: list) -> list:
+    # copy sizes list
+    sizes = copy_please.deepcopy(sizes_o)
 
-# Offset Next Crop And Convert Pixels To Millimeters
-imgOffset = imgOffset + cropW + config.get("dm").get("b") * (cropW / config.get("dm").get("w"))
+    # get image height and image width
+    img_height, img_width, _ = img.shape
 
-# Crop Out Third Image
-croppedImg3 = sourceImg[offsetH:offsetH + int(cropH), offsetW + int(imgOffset):offsetW + int(imgOffset) + int(cropW)]
+    # get max possible image size
+    max_size = max_image_size_mm(sizes)
 
-# Crop Out Third Image For Smaller Screen
-smallerImageHeightPercent = config.get("dr").get("h") / (config.get("dm").get("h") / 100)
-print(smallerImageHeightPercent)
+    # assume landscape mode (width > height)
+    # scale width
+    one_percent = max_size[0] / 100
+    factor = img_width / one_percent / 100
 
-smallerImageHeight = (cropH / 100) * smallerImageHeightPercent
-smallerImageWidth = (smallerImageHeight / 9) * 16
+    print(">>>>> monitors: " + str(max_image_size_mm(sizes)) + " - img: " + str(img_width) + ", " + str(img_height))
 
-croppedImg3 = croppedImg3[int((cropH - smallerImageHeight) / 2):int(smallerImageHeight + (cropH - smallerImageHeight) / 2), 0:int(smallerImageWidth)]
+    # scale sizes to width
+    for s in sizes:
+        s[0] *= factor
+        s[1] *= factor
 
-# cv2.imshow("left", croppedImg1)
-# cv2.imshow("middle", croppedImg2)
-# cv2.imshow("right", croppedImg3)
-# cv2.waitKey(0)
+    print(">>>>> monitors: " + str(max_image_size_mm(sizes)) + " - img: " + str(img_width) + ", " + str(img_height))
 
-print("Hallo Welt luul!")
+    # get max possible image size
+    max_size = max_image_size_mm(sizes)
 
-folderTitle = datetime.now().strftime("%d-%m-%Y-%H-%M-%S")
+    # if image is too short (height)
+    if img_height < get_widest_monitor(sizes)[1]:
+        one_percent = max_size[1] / 100
+        factor = img_height / one_percent / 100
+        # scale sizes to height
+        for s in sizes:
+            s[0] *= factor
+            s[1] *= factor
+        print(">>>>> monitors: " + str(max_image_size_mm(sizes)) + " - img: " + str(img_width) + ", " + str(img_height))
 
-currentPath = Path().resolve()
-folderPath = os_path.join(currentPath, "wallpaperSlicerOutput/" + folderTitle)
+    # floor values
+    for s in sizes:
+        s[0] = math.floor(s[0])
+        s[1] = math.floor(s[1])
 
-mkdir(folderPath)
+    return sizes
 
-chdir(folderPath)
-imwrite("left.jpg", croppedImg1)
-imwrite("middle.jpg", croppedImg2)
-imwrite("right.jpg", croppedImg3)
 
-startfile(folderPath)
+def slice_img(img: numpy.ndarray, sizes: list, offset_top: list) -> list:
+    sliced_images = []
+    offset_x = 0
+    # slice image
+    for (i, s) in enumerate(sizes):
+        print(">>>> " + str(offset_top[i] + s[1]))
+        cropped_img = img[offset_top[i]:offset_top[i] + int(s[1]), offset_x:offset_x + int(s[0])]
+        sliced_images.append(cropped_img)
+        offset_x += int((g_border_width + s[0]))
+
+    return sliced_images
+
+
+def save_slices(images: list) -> str:
+    folder_title = datetime.now().strftime("%d-%m-%Y-%H-%M-%S")
+    current_path = Path().resolve()
+
+    general_folder_path = os_path.join(current_path, "wallpaper-slicer-output/")
+    if not os.path.isdir(general_folder_path):
+        mkdir(general_folder_path)
+
+    folder_path = os_path.join(general_folder_path, folder_title)
+
+    mkdir(folder_path)
+    chdir(folder_path)
+
+    for (i, img) in enumerate(images):
+        cv2.imwrite(str(i + 1) + ".jpg", img)
+
+    return folder_path
+
+
+def open_file(filename):
+    # from https://stackoverflow.com/questions/17317219/is-there-an-platform-independent-equivalent-of-os-startfile
+    if sys.platform == "win32":
+        os.startfile(filename)
+    else:
+        opener = "open" if sys.platform == "darwin" else "xdg-open"
+        subprocess.call([opener, filename])
+
+
+# wallpaper change
+def change_wallpaper(number_of_monitors: int, path: str = "") -> None:
+    # remove second window (root)
+    tkinter.Tk().withdraw()
+
+    name_convention = ["Transcoded_002", "Transcoded_001", "Transcoded_000"]
+    output_directory = "C:/Users/User/AppData/Roaming/Microsoft/Windows/Themes"
+
+    # select path
+    if not path:
+        print("Choose a random file from the folder that holds the wallpapers.")
+        path = filedialog.askopenfilename()
+        path = os_path.dirname(path)
+
+    if not path:
+        print("No path found.")
+
+    # print(path)
+
+    # create list of files in directory that end with .jpg
+    images = [f for f in os.listdir(path) if f.endswith(".jpg") or f.endswith(".png")]
+
+    os.chdir(output_directory)
+
+    # loop through amount of desktops
+    for (idx, i) in enumerate(images):
+        if idx > number_of_monitors - 1:
+            continue
+        image_path = f"{path}/{i}"
+        new_image_path = f"{output_directory}/{name_convention[idx]}"
+        shutil.copy(image_path, new_image_path)
+
+    file_name = "restartExplorer.bat"
+    file = open(file_name, "w")
+    file.write('taskkill /im explorer.exe /f\nstart explorer.exe\nexit')
+    file.close()
+    filepath = f"{output_directory}/{file_name}"
+    os.startfile(filepath)
+
+
+if __name__ == "__main__":
+    # get monitors
+    monitor_sizes = get_monitor_sizes()
+
+    number_of_monitors = len(monitor_sizes)
+
+    change_variations = ["change", "wc", "cw"]
+    if len(sys.argv) > 1 and sys.argv[1] in change_variations:
+        change_wallpaper(number_of_monitors)
+        exit()
+
+    # arrange monitors
+    arranged_sizes = choose_arrangement(monitor_sizes)
+    print(">>> arranged.")
+
+    # get image
+    original_img = get_image()
+    print(">>> got original.")
+
+    # scale monitor sizes
+    scaled_sizes = scale_monitor_sizes(original_img, arranged_sizes)
+    print(">>> scaled.")
+
+    # choose slicing preferences
+    slicing_offset_top = choose_slicing_preference(original_img, scaled_sizes)
+
+    # slice original image
+    slices = slice_img(original_img, scaled_sizes, slicing_offset_top)
+    print(">>> sliced.")
+
+    # save images
+    save_path = save_slices(slices)
+    print(">>> saved.")
+
+    # set wallpapers (only works for windows)
+    if os.name == "nt":
+        no_change_variations = ["nochange", "no-change", "nc"]
+        if len(sys.argv) > 1 and sys.argv[1] in no_change_variations:
+            open_file(save_path)
+            exit()
+        else:
+            change_wallpaper(number_of_monitors, save_path)
+
+    # open saved image path
+    open_file(save_path)
+
+    exit()
