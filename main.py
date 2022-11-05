@@ -8,7 +8,6 @@ from pathlib import Path
 from datetime import datetime
 from numpy import any as np_any
 from screeninfo import get_monitors
-import copy as copy_please
 import subprocess
 import sys
 import os
