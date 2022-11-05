@@ -36,8 +36,8 @@
 - start with <$ python3 main.py> to run in normal mode (cropping and replacing)
 - start with <$ python3 main.py no-change> to run in but not replace old wallpapers
 - start with <$ python3 main.py change> to just replace old wallpapers
- - for that: run python file > select folder with images > select random one
- - program will set wallpapers according to the list order of images
+    - for that: run python file > select folder with images > select random one
+    - program will set wallpapers according to the list order of images
 
 ### How to run?
 
@@ -49,6 +49,7 @@
 - update pip: $ pip install --upgrade pip
 - install the following libraries in your terminal:
 
+&nbsp;
 
 - $ pip install tk
 - $ pip install opencv-python
@@ -62,11 +63,16 @@
 - from your terminal: navigate to "WallpaperSlicer" folder
 - run command: **$ python3 main.py**
 
+&nbsp;
 
 - follow on-screen prompt:
- - select left monitor
- - select next left monitor of remaining monitors
+    - select left monitor
+    - select next left monitor of remaining monitors
 - choose which section of the original image the cropped images will be taken from
- - choose top, middle or bottom 
+    - choose top, middle or bottom 
 
 - the finished files (images) will be saved as .jpg in "WallpaperSlicer/wallpaper-slicer-output".
+
+### Keep In mind!
+
+- at the moment, changing the wallpapers automatically is only supported on windows
