@@ -22,6 +22,51 @@
 
 - let's say you have three monitors of different sizes.
 - this tool will crop an image into parts of the image that match the real world size of your monitors.
+- it can also automatically set the new wallpapers
 
 ### How does it work?
+
 - splits an image into how many monitors you have
+- upscales the according cropped image for smaller monitors
+- saves new images
+- replaces old wallpaper
+
+### Variations
+
+- start with <$ python3 main.py> to run in normal mode (cropping and replacing)
+- start with <$ python3 main.py no-change> to run in but not replace old wallpapers
+- start with <$ python3 main.py change> to just replace old wallpapers
+ - for that: run python file > select folder with images > select random one
+ - program will set wallpapers according to the list order of images
+
+### How to run?
+
+- install libraries
+- run with python
+
+### Libraries
+
+- update pip: $ pip install --upgrade pip
+- install the following libraries in your terminal:
+
+
+- $ pip install tk
+- $ pip install opencv-python
+- $ pip install pathlib
+- $ pip install numpy
+- $ pip install screeninfo
+
+### Run with python
+
+- unpack zip, if you haven't already
+- from your terminal: navigate to "WallpaperSlicer" folder
+- run command: **$ python3 main.py**
+
+
+- follow on-screen prompt:
+ - select left monitor
+ - select next left monitor of remaining monitors
+- choose which section of the original image the cropped images will be taken from
+ - choose top, middle or bottom 
+
+- the finished files (images) will be saved as .jpg in "WallpaperSlicer/wallpaper-slicer-output".
