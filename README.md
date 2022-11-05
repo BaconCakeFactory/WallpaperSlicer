@@ -10,3 +10,18 @@
 </code></pre>
 
 # Wallpaper Slicer
+
+## README for WallpaperSlicer
+
+### What is it?
+
+- tool that crops images
+- can change your wallpaper
+
+### Why?
+
+- let's say you have three monitors of different sizes.
+- this tool will crop an image into parts of the image that match the real world size of your monitors.
+
+### How does it work?
+- splits an image into how many monitors you have
